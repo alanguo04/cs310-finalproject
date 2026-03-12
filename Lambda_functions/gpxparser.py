@@ -16,6 +16,25 @@ from datetime import datetime
 OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/archive"
 
 
+def calculate_pace_minutes_per_mile(start_segment, end_segment):
+
+    elapsed_seconds = (end_segment["time"] - start_segment["time"]).total_seconds()
+    if elapsed_seconds <= 0:
+        return None
+
+    distance_meters = gpxpy.geo.haversine_distance(
+        start_segment["lat"],
+        start_segment["lon"],
+        end_segment["lat"],
+        end_segment["lon"],
+    )
+    if distance_meters <= 0:
+        return None
+
+    miles = distance_meters / 1609.344
+    return (elapsed_seconds / 60.0) / miles
+
+
 def parse_gpx(gpx_content):
 
     gpx = gpxpy.parse(gpx_content)
@@ -80,7 +99,7 @@ def enrich_segments(segments):
 
     enriched = []
 
-    for seg in segments:
+    for seg_idx, seg in enumerate(segments):
 
         lat = round(seg["lat"], 2)
         lon = round(seg["lon"], 2)
@@ -102,19 +121,27 @@ def enrich_segments(segments):
         times = weather["time"]
 
         try:
-            idx = times.index(hour.strftime("%Y-%m-%dT%H:00"))
+            weather_idx = times.index(hour.strftime("%Y-%m-%dT%H:00"))
         except ValueError:
             continue
+
+        pace_minutes_per_mile = None
+        if len(segments) >= 2:
+            if seg_idx == 0:
+                pace_minutes_per_mile = calculate_pace_minutes_per_mile(segments[0], segments[1])
+            else:
+                pace_minutes_per_mile = calculate_pace_minutes_per_mile(segments[seg_idx - 1], segments[seg_idx])
 
         enriched.append({
             "lat": seg["lat"],
             "lon": seg["lon"],
             "time": seg["time"].isoformat(),
-            "temperature": weather["temperature_2m"][idx],
-            "humidity": weather["relative_humidity_2m"][idx],
-            "wind_speed": weather["wind_speed_10m"][idx],
-            "wind_direction": weather["wind_direction_10m"][idx],
-            "precipitation": weather["precipitation"][idx]
+            "temperature": weather["temperature_2m"][weather_idx],
+            "humidity": weather["relative_humidity_2m"][weather_idx],
+            "wind_speed": weather["wind_speed_10m"][weather_idx],
+            "wind_direction": weather["wind_direction_10m"][weather_idx],
+            "precipitation": weather["precipitation"][weather_idx],
+            "pace_min_per_mile": pace_minutes_per_mile
         })
 
     return enriched
