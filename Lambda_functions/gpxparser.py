@@ -1,5 +1,8 @@
 # https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-lambda-tutorial.html
 
+# NOTE TODO
+# Remove store_locally and add store_run functions
+
 import json
 import base64
 import uuid
@@ -157,6 +160,12 @@ def store_run(run_id, segments):
     )
 
 
+def store_locally(segments, output_path="enriched_segments.json"):
+
+    with open(output_path, "w", encoding="utf-8") as outfile:
+        json.dump(segments, outfile, indent=2)
+
+
 def lambda_handler(event, context):
 
     body = json.loads(event["body"])
@@ -177,6 +186,7 @@ def lambda_handler(event, context):
     segments = segment_points(points)
 
     enriched_segments = enrich_segments(segments)
+    store_locally(enriched_segments)
 
     run_id = str(uuid.uuid4())
 
