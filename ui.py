@@ -77,7 +77,7 @@ if st.button("Compute Pace"):
         # Current Lambda implementation expects body.run_id on PUT /pace.
         if response.status_code >= 400:
             with st.spinner("Retrying with PUT /pace and JSON body ..."):
-                response = requests.put(f"{BASE_URL}/pace", json={"run_id": rid}, timeout=180)
+                response = requests.put(f"{BASE_URL}/pace/{rid}", timeout=180)
 
         show_response(response)
 
