@@ -1,0 +1,6 @@
+USE sys;
+
+DROP DATABASE IF EXISTS final;
+
+CREATE DATABASE final;
+      

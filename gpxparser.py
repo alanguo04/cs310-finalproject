@@ -5,35 +5,16 @@
 
 import json
 import base64
+import uuid
 import requests
 import gpxpy
-import os
-import pymysql
-import logging
-import sys
-
-# rds settings
-user_name = os.environ['USER_NAME']
-password = os.environ['PASSWORD']
-rds_proxy_host = os.environ['RDS_PROXY_HOST']
-db_name = os.environ['DB_NAME']
+# import boto3
 
 from datetime import timedelta
 from datetime import datetime
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-# create the database connection outside of the handler to allow connections to be
-# re-used by subsequent function invocations.
-try:
-    conn = pymysql.connect(host=rds_proxy_host, user=user_name, passwd=password, db=db_name, connect_timeout=5)
-except pymysql.MySQLError as e:
-    logger.error("ERROR: Unexpected error: Could not connect to MySQL instance.")
-    logger.error(e)
-    sys.exit(1)
-
-logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
+# dynamodb = boto3.resource("dynamodb")
+# table = dynamodb.Table("runs")
 
 OPEN_METEO_URL = "https://archive-api.open-meteo.com/v1/archive"
 
@@ -160,8 +141,8 @@ def enrich_segments(segments):
             "time": seg["time"].isoformat(),
             "temperature": weather["temperature_2m"][weather_idx],
             "humidity": weather["relative_humidity_2m"][weather_idx],
-            # "wind_speed": weather["wind_speed_10m"][weather_idx],
-            # "wind_direction": weather["wind_direction_10m"][weather_idx],
+            "wind_speed": weather["wind_speed_10m"][weather_idx],
+            "wind_direction": weather["wind_direction_10m"][weather_idx],
             "precipitation": weather["precipitation"][weather_idx],
             "pace_min_per_mile": pace_minutes_per_mile
         })
@@ -169,40 +150,24 @@ def enrich_segments(segments):
     return enriched
 
 
-def store_run(segments):
+def store_run(run_id, segments):
 
-    with conn.cursor() as cur:
-        cur.execute("INSERT INTO runs (runid) VALUES (NULL); ")
-        cur.execute("SELECT LAST_INSERT_ID();")
-        runid = cur.fetchone()
-        sqlquery = """
-              INSERT INTO runsegments (runid, 
-                lat, 
-                lon, 
-                time, 
-                temperature, 
-                humidity, 
-                precipitation,
-                pace, 
-                adjusted_pace)
-              VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NULL);
-              """
-        for seg in segments:
-            cur.execute(sqlquery, (runid,
-                            seg["lat"],
-                            seg["lon"],
-                            seg["time"],
-                            seg["temperature"],
-                            seg["humidity"],
-                            seg["precipitation"],
-                            seg["pace_min_per_mile"],))
-        
-    conn.commit()
-    return runid
+    table.put_item(
+        Item={
+            "run_id": run_id,
+            "segments": segments
+        }
+    )
+
+
+def store_locally(segments, output_path="enriched_segments.json"):
+
+    with open(output_path, "w", encoding="utf-8") as outfile:
+        json.dump(segments, outfile, indent=2)
 
 
 def lambda_handler(event, context):
-    # logger.info("1")
+
     body = json.loads(event["body"])
 
     filename = body["filename"]
@@ -213,7 +178,7 @@ def lambda_handler(event, context):
             "statusCode": 400,
             "body": json.dumps({"error": "Only GPX supported"})
         }
-    # logger.info("2")
+
     gpx_text = file_data.decode("utf-8")
 
     points = parse_gpx(gpx_text)
@@ -221,12 +186,17 @@ def lambda_handler(event, context):
     segments = segment_points(points)
 
     enriched_segments = enrich_segments(segments)
+    store_locally(enriched_segments)
 
-    run_id = store_run(enriched_segments)
-    # logger.info("3")
+    run_id = str(uuid.uuid4())
+
+    # store_run(run_id, enriched_segments)
+
     return {
         "statusCode": 200,
         "body": json.dumps({
             "run_id": run_id,
+            "segments_processed": len(enriched_segments)
         }),
+        "data": enriched_segments
     }
