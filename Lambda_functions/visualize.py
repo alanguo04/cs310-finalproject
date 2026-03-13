@@ -127,7 +127,7 @@ def upload_to_s3(html_bytes, run_id):
 
 def update_visualization_link(run_id):
 
-    s3_uri = f"s3://{s3_bucket}/visualizations/{run_id}.html"
+    s3_uri = f"visualizations/{run_id}.html"
 
     with conn.cursor() as cur:
         cur.execute(
