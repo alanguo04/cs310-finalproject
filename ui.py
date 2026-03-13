@@ -92,7 +92,9 @@ if st.button("Generate Heatmap"):
             response = requests.put(f"{BASE_URL}/heatmap/{runid_heatmap_put.strip()}", timeout=180)
         parsed = show_response(response)
         if isinstance(parsed, dict) and parsed.get("visualization_url"):
-            st.link_button("Open Visualization", parsed["visualization_url"])
+            viz_url = parsed["visualization_url"]
+            st.components.v1.iframe(viz_url, height=600, scrolling=True)
+            st.caption(f"[Open in new tab]({viz_url})")
 
 st.divider()
 st.subheader("GET /heatmap/{runid}")
@@ -105,4 +107,6 @@ if st.button("Get Heatmap URL"):
             response = requests.get(f"{BASE_URL}/heatmap/{runid_heatmap_get.strip()}", timeout=120)
         parsed = show_response(response)
         if isinstance(parsed, dict) and parsed.get("visualization_url"):
-            st.link_button("Open Visualization", parsed["visualization_url"])
+            viz_url = parsed["visualization_url"]
+            st.components.v1.iframe(viz_url, height=600, scrolling=True)
+            st.caption(f"[Open in new tab]({viz_url})")
