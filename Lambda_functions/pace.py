@@ -1,7 +1,7 @@
 # by Taeyoung Lee
 # API 2: Environment-Adjusted Pace Computation
 #
-# Given a run_id, retrieves enriched segments from RDS, computes
+# Given a runid, retrieves enriched segments from RDS, computes
 # an environment-adjusted pace for each segment, then writes 
 # adjusted_pace back to RDS.
 #
@@ -351,15 +351,15 @@ def lambda_handler(event, context):
     """
     AWS Lambda entry point for API 2.
 
-    Expects event body: { "run_id": <int> }
+    Expects event body: { "runid": <int> }
 
-    Retrieves enriched segments from RDS for the given run_id,
+    Retrieves enriched segments from RDS for the given runid,
     computes environment-adjusted pace for each segment, updates
     RDS with adjusted_pace values, and returns summary statistics.
 
     Parameters
     ----------
-    event: API Gateway event with body containing run_id
+    event: API Gateway event with body containing runid
     context: Lambda context (unused)
 
     Returns
@@ -368,14 +368,20 @@ def lambda_handler(event, context):
     """
 
     try:
-        body = json.loads(event["body"])
+        runid = event.get('pathParameters', {}).get('runid')
 
-        run_id = body.get("run_id")
-
-        if run_id is None:
+        if not runid:
             return {
                 "statusCode": 400,
-                "body": json.dumps({"error": "missing run_id"})
+                "body": json.dumps({"error": "Missing runid path parameter"})
+            }
+
+        try:
+            runid = int(runid)
+        except ValueError:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "runid must be an integer"})
             }
 
         #
@@ -391,14 +397,14 @@ def lambda_handler(event, context):
                 ORDER BY time ASC
             """
 
-            cur.execute(sql_select, (run_id,))
+            cur.execute(sql_select, (runid,))
             segments = cur.fetchall()
 
         if len(segments) == 0:
             return {
                 "statusCode": 404,
                 "body": json.dumps({
-                    "error": f"no segments found for run_id {run_id}"
+                    "error": f"no segments found for runid {runid}"
                 })
             }
 
@@ -433,7 +439,7 @@ def lambda_handler(event, context):
             """
 
             for upd in updates:
-                cur.execute(sql_update, (upd[0], run_id, upd[1], upd[2], upd[3]))
+                cur.execute(sql_update, (upd[0], runid, upd[1], upd[2], upd[3]))
 
         conn.commit()
 
@@ -456,7 +462,7 @@ def lambda_handler(event, context):
             avg_factor = avg_pace / avg_adjusted if avg_adjusted > 0 else 1.0
 
             summary = {
-                "run_id": run_id,
+                "runid": runid,
                 "total_segments": len(segments),
                 "valid_segments": len(valid_paces),
                 "avg_pace_min_per_mile": round(avg_pace, 2),
@@ -466,7 +472,7 @@ def lambda_handler(event, context):
             }
         else:
             summary = {
-                "run_id": run_id,
+                "runid": runid,
                 "error": "no valid segments with pace data"
             }
 
