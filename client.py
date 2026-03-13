@@ -44,5 +44,25 @@ if response.status_code != 200:
   sys.exit(0)
 
 body = response.json()
+run_id = body["run_id"]
 
-print("Run ID:", body["run_id"])
+print("Run ID:", run_id)
+
+# request route visualization
+viz_url = baseurl + f"/final/visualize/{run_id}"
+
+print(f"Requesting route visualization for run {run_id}...")
+
+viz_response = requests.get(viz_url, timeout=120)
+
+if viz_response.status_code != 200:
+  print("**ERROR: visualization failed with status code:", viz_response.status_code)
+  try:
+    print(viz_response.json())
+  except Exception:
+    print(viz_response.text)
+  sys.exit(0)
+
+viz_body = viz_response.json()
+print("Visualization URL:", viz_body["visualization_url"])
+print("Segments visualized:", viz_body["segments_visualized"])
