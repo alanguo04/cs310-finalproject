@@ -72,7 +72,7 @@ if st.button("Compute Pace"):
     else:
         rid = int(runid_pace.strip())
         with st.spinner("Calling PUT /pace ..."):
-            response = requests.put(f"{BASE_URL}/pace", json={"run_id": rid}, timeout=180)
+            response = requests.put(f"{BASE_URL}/pace/{rid}", timeout=180)
         parsed = show_response(response)
         if isinstance(parsed, dict) and parsed.get("avg_pace_min_per_mile"):
             st.success(
