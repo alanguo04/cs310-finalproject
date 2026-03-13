@@ -64,22 +64,22 @@ if st.button("Fetch Segment Data"):
         show_response(response)
 
 st.divider()
-st.subheader("PUT /pace (or /pace/{runid})")
+st.subheader("PUT /pace")
 runid_pace = st.text_input("Run ID for pace", key="runid_pace")
 if st.button("Compute Pace"):
     if not runid_pace.strip():
         st.warning("Enter a runid first.")
     else:
-        rid = runid_pace.strip()
-        with st.spinner("Calling PUT /pace/{runid} ..."):
-            response = requests.put(f"{BASE_URL}/pace/{rid}", timeout=180)
-
-        # Current Lambda implementation expects body.run_id on PUT /pace.
-        if response.status_code >= 400:
-            with st.spinner("Retrying with PUT /pace and JSON body ..."):
-                response = requests.put(f"{BASE_URL}/pace/{rid}", timeout=180)
-
-        show_response(response)
+        rid = int(runid_pace.strip())
+        with st.spinner("Calling PUT /pace ..."):
+            response = requests.put(f"{BASE_URL}/pace", json={"run_id": rid}, timeout=180)
+        parsed = show_response(response)
+        if isinstance(parsed, dict) and parsed.get("avg_pace_min_per_mile"):
+            st.success(
+                f"Avg pace: {parsed['avg_pace_min_per_mile']} min/mile → "
+                f"Adjusted: {parsed['avg_adjusted_pace_min_per_mile']} min/mile "
+                f"({parsed['pct_slower_from_conditions']}% from conditions)"
+            )
 
 st.divider()
 st.subheader("PUT /heatmap/{runid}")
@@ -92,7 +92,9 @@ if st.button("Generate Heatmap"):
             response = requests.put(f"{BASE_URL}/heatmap/{runid_heatmap_put.strip()}", timeout=180)
         parsed = show_response(response)
         if isinstance(parsed, dict) and parsed.get("visualization_url"):
-            st.link_button("Open Visualization", parsed["visualization_url"])
+            viz_url = parsed["visualization_url"]
+            st.components.v1.iframe(viz_url, height=600, scrolling=True)
+            st.caption(f"[Open in new tab]({viz_url})")
 
 st.divider()
 st.subheader("GET /heatmap/{runid}")
@@ -105,4 +107,6 @@ if st.button("Get Heatmap URL"):
             response = requests.get(f"{BASE_URL}/heatmap/{runid_heatmap_get.strip()}", timeout=120)
         parsed = show_response(response)
         if isinstance(parsed, dict) and parsed.get("visualization_url"):
-            st.link_button("Open Visualization", parsed["visualization_url"])
+            viz_url = parsed["visualization_url"]
+            st.components.v1.iframe(viz_url, height=600, scrolling=True)
+            st.caption(f"[Open in new tab]({viz_url})")
