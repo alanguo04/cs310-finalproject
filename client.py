@@ -48,7 +48,37 @@ run_id = body["run_id"]
 
 print("Run ID:", run_id)
 
-# request route visualization
+#
+# call API 2: compute adjusted pace
+#
+print()
+print(f"Calling API 2 (adjusted pace) for run_id {run_id}...")
+
+pace_url = baseurl + "/pace"
+pace_data = {"run_id": run_id}
+
+response2 = requests.put(pace_url, json=pace_data)
+
+if response2.status_code != 200:
+  print("**ERROR: API 2 failed with status code:", response2.status_code)
+  try:
+    print(response2.json())
+  except Exception:
+    print(response2.text)
+  sys.exit(0)
+
+pace_body = response2.json()
+
+print(f"Total segments: {pace_body['total_segments']}")
+print(f"Valid segments: {pace_body['valid_segments']}")
+print(f"Avg pace: {pace_body['avg_pace_min_per_mile']} min/mile")
+print(f"Avg adjusted pace: {pace_body['avg_adjusted_pace_min_per_mile']} min/mile")
+print(f"Conditions impact: {pace_body['pct_slower_from_conditions']}%")
+
+#
+# call API 3: request route visualization
+#
+print()
 viz_url = baseurl + f"/final/visualize/{run_id}"
 
 print(f"Requesting route visualization for run {run_id}...")
