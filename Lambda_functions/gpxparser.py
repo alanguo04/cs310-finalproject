@@ -73,7 +73,8 @@ def parse_gpx(gpx_content):
                 points.append({
                     "lat": p.latitude,
                     "lon": p.longitude,
-                    "time": p.time
+                    "time": p.time,
+                    "elevation": p.elevation
                 })
 
     return points
@@ -158,6 +159,7 @@ def enrich_segments(segments):
             "lat": seg["lat"],
             "lon": seg["lon"],
             "time": seg["time"].isoformat(),
+            "elevation": seg["elevation"],
             "temperature": weather["temperature_2m"][weather_idx],
             "humidity": weather["relative_humidity_2m"][weather_idx],
             # "wind_speed": weather["wind_speed_10m"][weather_idx],
@@ -180,18 +182,20 @@ def store_run(segments):
                 lat, 
                 lon, 
                 time, 
+                elevation,
                 temperature, 
                 humidity, 
                 precipitation,
                 pace, 
                 adjusted_pace)
-              VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NULL);
+              VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NULL);
               """
         for seg in segments:
             cur.execute(sqlquery, (runid,
                             seg["lat"],
                             seg["lon"],
                             seg["time"],
+                            seg["elevation"],
                             seg["temperature"],
                             seg["humidity"],
                             seg["precipitation"],

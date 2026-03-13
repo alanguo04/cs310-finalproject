@@ -11,7 +11,8 @@ baseurl = "https://urv3reouhh.execute-api.us-east-2.amazonaws.com/prod"
 url = baseurl + "/final"
 
 # filename = input("GPX filename? ")
-filename= "short.gpx"
+# filename= "short.gpx"
+filename = "Surf_City_Half.gpx"
 filepath = pathlib.Path(filename)
 
 if not filepath.is_file():

@@ -18,6 +18,7 @@ CREATE TABLE runsegments
     lat             DECIMAL(9,6)  NOT NULL,
     lon             DECIMAL(9,6)  NOT NULL,
     time            TIMESTAMP     NOT NULL,
+    elevation       DECIMAL(8,2),
     temperature     DECIMAL(5,2),
     humidity        DECIMAL(5,2),
 --     wind_speed      DECIMAL(5,2),
