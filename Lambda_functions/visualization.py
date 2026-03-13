@@ -2,19 +2,18 @@ import json
 import os
 import sys
 import logging
-import io
 from decimal import Decimal
 
 import pymysql
 import boto3
-import folium
 
 # rds settings
 user_name = os.environ['USER_NAME']
 password = os.environ['PASSWORD']
 rds_proxy_host = os.environ['RDS_PROXY_HOST']
 db_name = os.environ['DB_NAME']
-s3_bucket = os.environ['S3_BUCKET_NAME']
+s3_bucket = os.environ['S3_BUCKET']
+mapbox_token = os.environ['MPBX_TOKEN']
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -31,12 +30,12 @@ logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
 s3_client = boto3.client('s3')
 
 
-def fetch_segments(run_id):
+def fetch_segments(runid):
 
     with conn.cursor(pymysql.cursors.DictCursor) as cur:
         cur.execute(
             "SELECT lat, lon, pace, adjusted_pace FROM runsegments WHERE runid = %s ORDER BY time ASC",
-            (run_id,)
+            (runid,)
         )
         rows = cur.fetchall()
 
@@ -74,40 +73,69 @@ def pace_to_hex(pace_value, pace_min, pace_max):
     return f"#{r:02x}{g:02x}00"
 
 
-def build_map(segments, pace_min, pace_max):
+def build_map_html(segments, pace_min, pace_max):
 
     lats = [s['lat'] for s in segments]
     lons = [s['lon'] for s in segments]
     center_lat = (min(lats) + max(lats)) / 2
     center_lon = (min(lons) + max(lons)) / 2
 
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=13, tiles="OpenStreetMap")
-
+    features = []
     for i in range(len(segments) - 1):
         seg_start = segments[i]
         seg_end = segments[i + 1]
-
         pace_val = seg_end.get('adjusted_pace') or seg_end.get('pace')
         color = pace_to_hex(pace_val, pace_min, pace_max)
+        features.append({
+            "type": "Feature",
+            "properties": {"color": color},
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                    [seg_start['lon'], seg_start['lat']],
+                    [seg_end['lon'], seg_end['lat']],
+                ]
+            }
+        })
 
-        folium.PolyLine(
-            locations=[
-                [seg_start['lat'], seg_start['lon']],
-                [seg_end['lat'], seg_end['lon']],
-            ],
-            color=color,
-            weight=5,
-            opacity=0.85,
-        ).add_to(m)
+    geojson = json.dumps({"type": "FeatureCollection", "features": features})
+    bounds_js = json.dumps([
+        [min(lons), min(lats)],
+        [max(lons), max(lats)]
+    ])
 
-    m.fit_bounds([[min(lats), min(lons)], [max(lats), max(lons)]])
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet"/>
+<style>body{{margin:0}}#map{{width:100%;height:100vh}}</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+mapboxgl.accessToken='{mapbox_token}';
+const map=new mapboxgl.Map({{container:'map',style:'mapbox://styles/mapbox/streets-v12',center:[{center_lon},{center_lat}],zoom:13}});
+map.addControl(new mapboxgl.NavigationControl());
+map.on('load',()=>{{
+  const data={geojson};
+  data.features.forEach((f,i)=>{{
+    const id='seg-'+i;
+    map.addSource(id,{{type:'geojson',data:f}});
+    map.addLayer({{id:id,type:'line',source:id,paint:{{'line-color':f.properties.color,'line-width':5,'line-opacity':0.85}}}});
+  }});
+  map.fitBounds({bounds_js},{{padding:40}});
+}});
+</script>
+</body>
+</html>"""
 
-    return m
 
+def upload_to_s3(html_bytes, runid):
 
-def upload_to_s3(html_bytes, run_id):
-
-    key = f"visualizations/{run_id}.html"
+    key = f"visualizations/{runid}.html"
 
     s3_client.put_object(
         Bucket=s3_bucket,
@@ -125,14 +153,14 @@ def upload_to_s3(html_bytes, run_id):
     return presigned_url
 
 
-def update_visualization_link(run_id):
+def update_visualization_link(runid):
 
-    s3_uri = f"visualizations/{run_id}.html"
+    s3_uri = f"visualizations/{runid}.html"
 
     with conn.cursor() as cur:
         cur.execute(
             "UPDATE runs SET visualizationlink = %s WHERE runid = %s",
-            (s3_uri, run_id)
+            (s3_uri, runid)
         )
     conn.commit()
 
@@ -140,29 +168,29 @@ def update_visualization_link(run_id):
 def lambda_handler(event, context):
 
     try:
-        run_id = event.get('pathParameters', {}).get('run_id')
+        runid = event.get('pathParameters', {}).get('runid')
 
-        if not run_id:
+        if not runid:
             return {
                 "statusCode": 400,
-                "body": json.dumps({"error": "Missing run_id path parameter"})
+                "body": json.dumps({"error": "Missing runid path parameter"})
             }
 
         try:
-            run_id = int(run_id)
+            runid = int(runid)
         except ValueError:
             return {
                 "statusCode": 400,
-                "body": json.dumps({"error": "run_id must be an integer"})
+                "body": json.dumps({"error": "runid must be an integer"})
             }
 
         # 1: fetch segments from DB
         conn.ping(reconnect=True)
-        segments = fetch_segments(run_id)
+        segments = fetch_segments(runid)
         if not segments:
             return {
                 "statusCode": 404,
-                "body": json.dumps({"error": f"No segments found for run_id {run_id}"})
+                "body": json.dumps({"error": f"No segments found for runid {runid}"})
             }
 
         if len(segments) < 2:
@@ -187,21 +215,21 @@ def lambda_handler(event, context):
         pace_min = min(pace_values)
         pace_max = max(pace_values)
 
-        # 3: build folium map with color-coded route
-        m = build_map(segments, pace_min, pace_max)
-        html_bytes = m._repr_html_().encode('utf-8')
+        # 3: build mapbox map with color-coded route
+        html_str = build_map_html(segments, pace_min, pace_max)
+        html_bytes = html_str.encode('utf-8')
 
         # 4: upload to S3
-        presigned_url = upload_to_s3(html_bytes, run_id)
+        presigned_url = upload_to_s3(html_bytes, runid)
 
         # 5: update DB with visualization link
-        update_visualization_link(run_id)
+        update_visualization_link(runid)
 
         # 6: return URL to client
         return {
             "statusCode": 200,
             "body": json.dumps({
-                "run_id": run_id,
+                "runid": runid,
                 "visualization_url": presigned_url,
                 "segments_visualized": len(segments)
             })
