@@ -6,6 +6,8 @@
 import json
 import base64
 import requests
+from requests.exceptions import ConnectionError, Timeout
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import gpxpy
 import os
 import pymysql
@@ -100,6 +102,11 @@ def segment_points(points):
     return segments
 
 
+@retry(stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        retry=retry_if_exception_type((ConnectionError, Timeout)),
+        reraise=True
+      )
 def get_weather(lat, lon, date):
 
     params = {
