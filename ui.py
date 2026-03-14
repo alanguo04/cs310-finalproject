@@ -1,3 +1,6 @@
+# streamlit dashboard for testing all API endpoints
+# run with: streamlit run ui.py
+
 import base64
 import json
 
@@ -35,6 +38,7 @@ st.markdown(
 )
 
 
+# some responses wrap the actual data inside a "body" key, so we unwrap it
 def parse_response(response: requests.Response):
     try:
         payload = response.json()
@@ -49,6 +53,7 @@ def parse_response(response: requests.Response):
     return payload
 
 
+# display response with a styled card showing status code
 def show_response(response: requests.Response, title: str):
     status_class = "status-ok" if response.status_code < 400 else "status-bad"
     st.markdown(
@@ -68,6 +73,7 @@ def show_response(response: requests.Response, title: str):
     return parsed
 
 
+# try to pull segment list out of the response, could be under different keys
 def extract_segments(parsed):
     if isinstance(parsed, list):
         return parsed
@@ -78,6 +84,7 @@ def extract_segments(parsed):
     return None
 
 
+# show segments as a dataframe with summary metrics
 def render_segments_table(parsed):
     segments = extract_segments(parsed)
     if not segments:
@@ -101,10 +108,12 @@ def render_segments_table(parsed):
 st.title("Run Analytics Dashboard")
 st.caption(f"API Base URL: `{BASE_URL}`")
 
+# tabs for each API endpoint
 tab_upload, tab_segments, tab_pace, tab_heatmap = st.tabs(
     ["Upload Run", "Segment Data", "Pace", "Heatmap"]
 )
 
+# API 1: upload gpx file, creates run + segments in RDS
 with tab_upload:
     st.markdown(
         '<div class="api-card"><div class="api-title">POST /segmentdata</div><div class="api-subtitle">Upload GPX and create run + segment records.</div></div>',
@@ -125,6 +134,7 @@ with tab_upload:
             if isinstance(parsed, dict) and parsed.get("run_id") is not None:
                 st.success(f"Created run_id: {parsed['run_id']}")
 
+# fetch and display all segments for a run
 with tab_segments:
     st.markdown(
         '<div class="api-card"><div class="api-title">GET /segmentdata/{runid}</div><div class="api-subtitle">View enriched segments as an interactive table.</div></div>',
@@ -140,6 +150,7 @@ with tab_segments:
             parsed = show_response(response, "Segment Data Response")
             render_segments_table(parsed)
 
+# API 2: compute environment-adjusted pace
 with tab_pace:
     st.markdown(
         '<div class="api-card"><div class="api-title">PUT /pace/{runid}</div><div class="api-subtitle">Compute and persist environment-adjusted pace values.</div></div>',
@@ -159,6 +170,7 @@ with tab_pace:
                 c2.metric("Avg Pace", parsed.get("avg_pace_min_per_mile", "N/A"))
                 c3.metric("Avg Adjusted", parsed.get("avg_adjusted_pace_min_per_mile", "N/A"))
 
+# API 3: generate or fetch heatmap visualization
 with tab_heatmap:
     st.markdown(
         '<div class="api-card"><div class="api-title">PUT/GET /heatmap/{runid}</div><div class="api-subtitle">Generate or fetch visualization URL and preview it.</div></div>',
