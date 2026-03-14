@@ -6,8 +6,6 @@
 import json
 import base64
 import requests
-from requests.exceptions import ConnectionError, Timeout
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import gpxpy
 import os
 import pymysql
@@ -101,12 +99,6 @@ def segment_points(points):
 
     return segments
 
-
-@retry(stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=30),
-        retry=retry_if_exception_type((ConnectionError, Timeout)),
-        reraise=True
-      )
 def get_weather(lat, lon, date):
 
     params = {
@@ -121,7 +113,6 @@ def get_weather(lat, lon, date):
     resp.raise_for_status()
 
     return resp.json()["hourly"]
-
 
 def enrich_segments(segments):
 
@@ -143,13 +134,12 @@ def enrich_segments(segments):
         if key not in weather_cache:
 
             date = hour.strftime("%Y-%m-%d")
-
             weather_cache[key] = get_weather(lat, lon, date)
 
         weather = weather_cache[key]
 
         times = weather["time"]
-
+        
         try:
             weather_idx = times.index(hour.strftime("%Y-%m-%dT%H:00"))
         except ValueError:
@@ -176,7 +166,6 @@ def enrich_segments(segments):
         })
 
     return enriched
-
 
 def store_run(segments):
 
@@ -224,7 +213,6 @@ def lambda_handler(event, context):
             "statusCode": 400,
             "body": json.dumps({"error": "Only GPX supported"})
         }
-    # logger.info("2")
     gpx_text = file_data.decode("utf-8")
 
     points = parse_gpx(gpx_text)
@@ -234,7 +222,6 @@ def lambda_handler(event, context):
     enriched_segments = enrich_segments(segments)
 
     run_id = store_run(enriched_segments)
-    # logger.info("3")
     return {
         "statusCode": 200,
         "body": json.dumps({

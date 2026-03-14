@@ -156,7 +156,6 @@ def upload_to_s3(html_bytes, runid):
 def update_visualization_link(runid):
 
     s3_uri = f"visualizations/{runid}.html"
-
     with conn.cursor() as cur:
         cur.execute(
             "UPDATE runs SET visualizationlink = %s WHERE runid = %s",
@@ -184,7 +183,6 @@ def lambda_handler(event, context):
                 "body": json.dumps({"error": "runid must be an integer"})
             }
 
-        # 1: fetch segments from DB
         conn.ping(reconnect=True)
         segments = fetch_segments(runid)
         if not segments:
@@ -193,13 +191,6 @@ def lambda_handler(event, context):
                 "body": json.dumps({"error": f"No segments found for runid {runid}"})
             }
 
-        if len(segments) < 2:
-            return {
-                "statusCode": 400,
-                "body": json.dumps({"error": "Need at least 2 segments to visualize"})
-            }
-
-        # 2: compute pace range for color mapping
         pace_values = []
         for s in segments:
             p = s.get('adjusted_pace') or s.get('pace')
@@ -215,17 +206,13 @@ def lambda_handler(event, context):
         pace_min = min(pace_values)
         pace_max = max(pace_values)
 
-        # 3: build mapbox map with color-coded route
         html_str = build_map_html(segments, pace_min, pace_max)
         html_bytes = html_str.encode('utf-8')
 
-        # 4: upload to S3
         presigned_url = upload_to_s3(html_bytes, runid)
 
-        # 5: update DB with visualization link
         update_visualization_link(runid)
 
-        # 6: return URL to client
         return {
             "statusCode": 200,
             "body": json.dumps({

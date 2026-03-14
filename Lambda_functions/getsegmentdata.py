@@ -3,14 +3,13 @@ import pymysql
 import os
 import logging
 import sys
-# import time
 
 # decimal types aren't serializable 
 from decimal import Decimal
 
 def decimal_serializer(obj):
     if isinstance(obj, Decimal):
-        return str(obj) # Convert to a string to preserve precision
+        return str(obj) 
     raise TypeError("Object of type %s is not JSON serializable" % type(obj).__name__)
 
 # rds settings
@@ -32,11 +31,9 @@ def lambda_handler(event, context):
         sys.exit(1)
 
     logger.info("SUCCESS: Connection to RDS for MySQL instance succeeded")
-    # logger.info(f"ITEOJTIOEWJIO: {time.time()}")
     try:
         run_id = event.get("pathParameters", {}).get("runid")
         
-
         if not run_id:
             return {
                 "statusCode": 400,
@@ -54,7 +51,6 @@ def lambda_handler(event, context):
                     "body": json.dumps({"error": f"Run {run_id} not found"})
                 }
 
-            # Fetch all segments for the run
             cur.execute("""
                 SELECT runid, lat, lon, time, elevation,
                        temperature, humidity, precipitation,
@@ -64,11 +60,11 @@ def lambda_handler(event, context):
             """, (run_id,))
             segments = cur.fetchall()
 
-        # Convert datetime objects to strings for JSON serialization
+        # Convert datetime objects to strings
         for seg in segments:
             if seg.get("time") and hasattr(seg["time"], "isoformat"):
                 seg["time"] = seg["time"].isoformat()
-
+                
         return {
             "statusCode": 200,
             "body": json.dumps({
